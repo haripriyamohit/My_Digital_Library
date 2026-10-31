@@ -1,0 +1,25 @@
+{
+  "name": "my-digital-library",
+  "version": "1.0.0",
+  "description": "Interesting Reads: favourite essays as books on a rotating 3D shelf",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.1.0",
+    "@fontsource/playfair-display": "^5.1.0",
+    "@fontsource/source-serif-4": "^5.1.0",
+    "cannon-es": "^0.20.0",
+    "three": "^0.169.0",
+    "vite": "^5.4.10"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  }
+}

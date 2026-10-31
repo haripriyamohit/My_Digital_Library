@@ -1,0 +1,84 @@
+{
+ "label": "after, full resolution",
+ "profiles": {
+  "old laptop": {
+   "loading": {
+    "fps": 4.6,
+    "p95_ms": 550.0,
+    "hitches": 9,
+    "worst_ms": 1866.6,
+    "longtasks": 9,
+    "blocked_ms": 2053,
+    "cls": 0.0,
+    "first_shelf_ms": 4074
+   },
+   "idle spin": {
+    "fps": 3.0,
+    "p95_ms": 566.7,
+    "hitches": 0,
+    "worst_ms": 599.9,
+    "longtasks": 0,
+    "blocked_ms": 0,
+    "cls": 0
+   },
+   "hovering": {
+    "fps": 9.3,
+    "p95_ms": 433.3,
+    "hitches": 32,
+    "worst_ms": 616.7,
+    "longtasks": 0,
+    "blocked_ms": 0,
+    "cls": 0
+   },
+   "switching topic (fall)": {
+    "fps": 3.4,
+    "p95_ms": 516.7,
+    "hitches": 1,
+    "worst_ms": 616.7,
+    "longtasks": 6,
+    "blocked_ms": 335,
+    "cls": 0
+   },
+   "switching back (rise)": {
+    "fps": 5.5,
+    "p95_ms": 300.0,
+    "hitches": 1,
+    "worst_ms": 400.0,
+    "longtasks": 0,
+    "blocked_ms": 0,
+    "cls": 0
+   },
+   "opening a book": {
+    "fps": 3.5,
+    "p95_ms": 333.4,
+    "hitches": 0,
+    "worst_ms": 550.0,
+    "longtasks": 0,
+    "blocked_ms": 0,
+    "cls": 0
+   },
+   "shelving it": {
+    "fps": 3.0,
+    "p95_ms": 416.7,
+    "hitches": 0,
+    "worst_ms": 616.7,
+    "longtasks": 0,
+    "blocked_ms": 0,
+    "cls": 0
+   },
+   "scrolling the page": {
+    "fps": 17.2,
+    "p95_ms": 316.6,
+    "hitches": 14,
+    "worst_ms": 650.0,
+    "longtasks": 1,
+    "blocked_ms": 34,
+    "cls": 0
+   },
+   "whole session": {
+    "cls": 0.0,
+    "page_errors": 0
+   }
+  }
+ }
+}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Interesting Reads: 150 favourite essays as books on a rotating shelf.">
+<title>Interesting Reads</title>
+<link rel="icon" href="data:,">
+</head>
+<body>
+<header class="top">
+  <p class="eyebrow"><span id="eyebrowCount">150 essays</span> · ten shelves</p>
+  <button id="addBtn" class="btn add-btn" type="button" hidden>+ Add a read</button>
+  <h1 id="title" aria-label="Welcome to Interesting Reads"><span class="typed" aria-hidden="true"></span><span class="ghost" aria-hidden="true">Welcome to Interesting Reads</span></h1>
+</header>
+
+<div class="controls">
+  <div class="search-wrap">
+    <label class="sr-only" for="q">Search</label>
+    <input id="q" type="search" placeholder="What are you looking for?" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list">
+    <ul id="results" class="results" role="listbox" hidden></ul>
+  </div>
+  <button id="surprise" class="btn btn-solid" type="button">Surprise me</button>
+</div>
+<div class="topics" id="topics" role="group" aria-label="Topics"></div>
+
+<main>
+  <section class="stage" id="stage" tabindex="0" aria-label="Bookshelf. Use left and right arrow keys to move along the shelf, Enter to open a book.">
+    <canvas id="gl" aria-hidden="true"></canvas>
+    <p class="hint" id="hint" aria-hidden="true">Drag sideways to turn the shelf · click a book to open it</p>
+    <p class="focus-caption" id="focusCaption" aria-hidden="true"></p>
+    <article class="card" id="card" hidden aria-labelledby="cardTitle">
+      <p class="card-eyebrow" id="cardEyebrow"></p>
+      <h2 id="cardTitle" tabindex="-1"></h2>
+      <p class="card-meta" id="cardMeta"></p>
+      <p class="card-desc" id="cardDesc"></p>
+      <p class="card-topic" id="cardTopic"></p>
+      <div class="card-actions">
+        <a class="btn btn-solid" id="cardRead" target="_blank" rel="noopener">Read</a>
+        <button class="btn" id="cardShare" type="button">Copy share link</button>
+        <button class="btn" id="cardShelve" type="button">Shelve</button>
+      </div>
+      <div class="card-remove">
+        <button class="btn-text" id="cardRemove" type="button" hidden>Remove from shelf</button>
+        <p id="removeAsk" hidden>Remove this book from the shelf? <button class="btn-text danger" id="removeYes" type="button">Remove</button> <button class="btn-text" id="removeNo" type="button">Keep it</button></p>
+      </div>
+      <div class="card-nav">
+        <button class="btn-text" id="cardPrev" type="button">← Previous</button>
+        <span class="card-pos" id="cardPos"></span>
+        <button class="btn-text" id="cardNext" type="button">Next →</button>
+      </div>
+      <p class="share-note" id="shareNote" aria-live="polite"></p>
+    </article>
+  </section>
+  <ul class="sr-only" id="srList" aria-label="All books"></ul>
+  <section class="plain" id="list" hidden aria-label="All essays">
+    <p class="plain-note" id="plainNote">The 3D shelf could not start on this device, so here is the plain list.</p>
+    <div id="plainBody"></div>
+  </section>
+</main>
+<p class="sr-only" id="live" aria-live="polite"></p>
+
+<div class="sheet" id="addSheet" hidden>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+    <div class="sheet-head">
+      <h2 id="addTitle">Add a read</h2>
+      <button class="btn-text" id="addClose" type="button">Close</button>
+    </div>
+    <section id="addStep1">
+      <div class="seg" role="tablist" aria-label="How to add it">
+        <button type="button" role="tab" data-src="link" aria-selected="true">Link</button>
+        <button type="button" role="tab" data-src="text" aria-selected="false">Paste text</button>
+        <button type="button" role="tab" data-src="file" aria-selected="false">PDF or Word file</button>
+      </div>
+      <div data-pane="link">
+        <label for="aUrl">Link</label>
+        <input id="aUrl" type="url" placeholder="https://" autocomplete="off">
+        <label for="aUrlText">The article's text <span class="opt">(optional)</span></label>
+        <textarea id="aUrlText" rows="5" placeholder="Paste some or all of the article here and the title, author and topic fill themselves in. The page can't open other websites itself."></textarea>
+      </div>
+      <div data-pane="text" hidden>
+        <label for="aText">Text</label>
+        <textarea id="aText" rows="9" placeholder="Paste the essay or article"></textarea>
+        <label for="aTextUrl">Link <span class="opt">(optional)</span></label>
+        <input id="aTextUrl" type="url" placeholder="https://" autocomplete="off">
+      </div>
+      <div data-pane="file" hidden>
+        <label class="file-pick" for="aFile"><span class="btn">Choose a file</span> <span id="aFileName">No file chosen</span></label>
+        <input id="aFile" class="sr-only" type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain">
+        <p class="hint-line">PDF, Word (.docx) or plain text. A PDF's first page becomes the picture on the cover.</p>
+        <label for="aFileUrl">Link <span class="opt">(optional)</span></label>
+        <input id="aFileUrl" type="url" placeholder="https://" autocomplete="off">
+      </div>
+      <p class="a-status" id="aStatus" aria-live="polite"></p>
+      <div class="sheet-row"><button class="btn btn-solid" id="aRead" type="button">Read it</button></div>
+    </section>
+    <section id="addStep2" hidden>
+      <div class="review">
+        <canvas id="aCover" width="256" height="384" role="img" aria-label="Cover preview"></canvas>
+        <div class="fields">
+          <label for="fTitle">Title</label><input id="fTitle" type="text">
+          <label for="fAuthor">Author</label><input id="fAuthor" type="text">
+          <div class="two"><div><label for="fPub">Publication</label><input id="fPub" type="text"></div><div><label for="fYear">Year</label><input id="fYear" type="text" inputmode="numeric" maxlength="9"></div></div>
+          <label for="fTopic">Topic</label><select id="fTopic"></select>
+          <label for="fDesc">One-line description</label><input id="fDesc" type="text" maxlength="160">
+          <label for="fLink">Link</label><input id="fLink" type="url" placeholder="https://">
+          <label class="check" id="fUsePicRow"><input id="fUsePic" type="checkbox" checked> Use the picture from the file on the cover</label>
+        </div>
+      </div>
+      <p class="a-status" id="aNote" aria-live="polite"></p>
+      <div class="sheet-row"><button class="btn" id="aBack" type="button">Back</button><button class="btn btn-solid" id="aSave" type="button">Put it on the shelf</button></div>
+    </section>
+    <button class="btn-text export" id="aExport" type="button" hidden>Download essays.json with your additions</button>
+  </div>
+</div>
+<footer class="foot">Covers fill the panel on each book when an image is available. Links open in a new tab.</footer>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
