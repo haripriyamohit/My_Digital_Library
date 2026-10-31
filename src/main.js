@@ -62,12 +62,20 @@ function typeHeading() {
 }
 
 /* ---------- topic chips ---------- */
+// "Newly added" is a filter like a topic: every read added after the original list.
+const NEW = "__new";
+const inTopic = (e, t) => !t || (t === NEW ? !!e._extra : e.topic === t);
+const topicName = t => t === NEW ? "Newly added" : t;
 function buildChips() {
   const box = $("topics");
   const chip = (label, t, colour) =>
     `<button class="chip" type="button" data-topic="${esc(t ?? "")}" aria-pressed="${(topic ?? "") === (t ?? "")}" style="--chip:${colour}">${esc(label)}</button>`;
   if (!box.children.length) box.innerHTML = chip("All shelves", null, "#f3ecdc") +
     TOPICS.map((t, i) => chip(t, t, PALETTE[(i * 5) % PALETTE.length][0])).join("");
+  const nb = document.createElement("button");
+  nb.className = "chip chip-new"; nb.type = "button"; nb.dataset.topic = NEW; nb.setAttribute("aria-pressed", "false");
+  nb.style.setProperty("--chip", "#ffd93d"); nb.hidden = true; nb.innerHTML = `Newly added <span class="chip-count" id="newCount"></span>`;
+  box.firstElementChild.after(nb);
   box.addEventListener("click", ev => {
     const b = ev.target.closest(".chip"); if (!b) return;
     setTopic(b.dataset.topic || null);
@@ -95,7 +103,10 @@ function showFallback() {
   IR.ready = true; IR.firstFrame = performance.now(); document.body.dataset.ready = "1";
 }
 function filterPlain() {
-  for (const s of $("plainBody").children) s.hidden = !!topic && s.dataset.topic !== topic;
+  for (const s of $("plainBody").children) {
+    if (topic === NEW) { const items = [...s.querySelectorAll("li")]; items.forEach(li => li.hidden = !li.dataset.extra); s.hidden = !items.some(li => li.dataset.extra); }
+    else { s.querySelectorAll("li").forEach(li => li.hidden = false); s.hidden = !!topic && s.dataset.topic !== topic; }
+  }
 }
 
 /* ---------- search ---------- */
@@ -708,7 +719,7 @@ async function copyShare() {
 /* ---------- surprise + go to ---------- */
 async function surprise() {
   if (!has3D) {
-    const pool = DATA.filter(e => !topic || e.topic === topic), e = pool[Math.floor(Math.random() * pool.length)];
+    const pool = DATA.filter(e => inTopic(e, topic)), e = pool[Math.floor(Math.random() * pool.length)];
     document.querySelectorAll(".plain li.hit").forEach(li => li.classList.remove("hit"));
     const li = $("p-" + e.id); li.classList.add("hit"); li.scrollIntoView({ block: "center", behavior: REDUCED ? "auto" : "smooth" }); li.focus({ preventScroll: true });
     return;
@@ -720,7 +731,7 @@ async function surprise() {
 async function goToBook(id, { fromHash = false } = {}) {
   if (!has3D) {
     const li = $("p-" + id); if (!li) return;
-    if (topic && byId.get(id).topic !== topic) { topic = null; syncChips(); filterPlain(); }
+    if (topic && !inTopic(byId.get(id), topic)) { topic = null; syncChips(); filterPlain(); }
     li.scrollIntoView({ block: "center" }); li.classList.add("hit"); li.focus({ preventScroll: true }); return;
   }
   const b = books.find(x => x.id === id); if (!b) return;
@@ -739,13 +750,13 @@ async function setTopic(t) {
   if (!has3D) { filterPlain(); return; }
   busy = true; hovered = null; keySel = null; dirty = true;
   if (openB) await closeBook({ fast: true });
-  const match = b => !t || b.essay.topic === t;
+  const match = b => inTopic(b.essay, t);
   const leavers = books.filter(b => b.mode === "shelf" && !match(b));
   const risers = books.filter(b => (b.mode === "fallen" || b.mode === "falling") && match(b));
   const stayers = books.filter(b => b.mode === "shelf" && match(b));
   for (const b of books) b.visible = match(b);
   const n = books.filter(b => b.visible).length;
-  announce(t ? `Showing ${n} books in ${t}.` : `Showing all ${n} books.`);
+  announce(t ? `Showing ${n} books in ${topicName(t)}.` : `Showing all ${n} books.`);
 
   // targets for books that will sit on the shelf
   const keep = [...stayers, ...risers].sort((a, c) => a.id - c.id);
@@ -967,6 +978,8 @@ function renderExtraLists() {
     }
   }
   $("eyebrowCount").textContent = DATA.length + " essays";
+  const nb = $("topics").querySelector(".chip-new");
+  if (nb) { nb.hidden = !extras.length; $("newCount").textContent = extras.length; if (!extras.length && topic === NEW) setTopic(null); }
 }
 
 async function rebuildShelf() {
@@ -1062,7 +1075,7 @@ async function readIt() {
     }
     lastRead = { info, file, url, text };
     $("fTitle").value = d.title || ""; $("fAuthor").value = d.author || ""; $("fPub").value = d.publication || "";
-    $("fYear").value = d.year || ""; $("fDesc").value = d.description || ""; $("fTopic").value = d.topic || topic || "";
+    $("fYear").value = d.year || ""; $("fDesc").value = d.description || ""; $("fTopic").value = d.topic || (topic === NEW ? "" : topic) || "";
     $("fLink").value = url;
     $("fUsePic").checked = !!info.picture; $("fUsePicRow").hidden = !info.picture;
     $("aNote").textContent = noteFor(info, url);

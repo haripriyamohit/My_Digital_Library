@@ -173,3 +173,6 @@ main{max-width:1200px;margin:18px auto 0}
 .card-more{margin:10px 0 0;font:400 13px/1.5 var(--mono);color:var(--muted)}
 .card-more a{color:var(--ink);text-underline-offset:3px}
 .card-more a:hover{color:var(--lemon)}
+.chip-new{border-color:var(--lemon);color:var(--lemon)}
+.chip-new .chip-count{display:inline-block;min-width:1.6em;margin-left:6px;padding:2px 6px;border-radius:999px;background:var(--lemon);color:#120f0b;font-size:11px;text-align:center}
+.chip-new[aria-pressed="true"] .chip-count{background:#120f0b;color:var(--lemon)}
