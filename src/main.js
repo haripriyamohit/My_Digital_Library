@@ -41,7 +41,7 @@ async function init() {
   let ok = !qs.has("nogl");
   if (ok) { try { await start3D(); has3D = true; } catch (e) { console.error("3D failed", e); ok = false; } }
   if (!ok) showFallback();
-  setupAdd();
+  setupAdd(); setupOwner();
   await initStore();
   addEventListener("hashchange", handleHash);
   handleHash();
@@ -583,6 +583,8 @@ function setupKeys(stage) {
   stage.addEventListener("blur", () => { keySel = null; $("focusCaption").textContent = ""; });
   document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
+    if (!$("ownerSheet").hidden) { $("ownerSheet").hidden = true; return; }
+    if (aiOpen()) { closeAI(); return; }
     if (addOpen()) { closeAdd(); return; }
     if (openB) { closeBook(); $("stage").focus({ preventScroll: true }); }
   });
@@ -675,6 +677,13 @@ function showCard(b) {
   $("cardPos").textContent = `${list.indexOf(b) + 1} / ${list.length}`;
   $("shareNote").textContent = "";
   $("cardRead").hidden = !e.link;
+  const owner = store.mode === "cloud" && store.canAdd;
+  $("cardFile").hidden = !(e.hasFile && owner);
+  $("cardFile").textContent = /pdf/.test(e.fileType || "") ? "Open PDF" : "Open file";
+  $("cardDownload").hidden = !(e.hasFile && owner);
+  $("cardAttach").hidden = !(e._extra && owner && !e.hasFile);
+  $("cardFileNote").hidden = !(e.hasFile && !owner);
+  $("cardAsk").hidden = !(store.mode === "cloud" && store.ai);
   $("cardRemove").hidden = !(e._extra && store.canAdd); $("removeAsk").hidden = true;
   const card = $("card"); card.hidden = false;
   $("hint").style.opacity = 0;
@@ -874,10 +883,11 @@ async function riseTo(b, ang, delay, i) {
    with a button to download the updated essays.json.
    ===================================================================== */
 let BASE = null, extras = [], pendingArrival = null;
-const store = { mode: "none", db: null, assets: null, sample: null, canAdd: false };
+const store = { mode: "none", db: null, assets: null, sample: null, canAdd: false, ai: false, ownerKey: "" };
+const OWNER_KEY_STORE = "interesting-reads-owner";
 const LOCAL_KEY = "interesting-reads-added-v1";
 const safeLink = u => (typeof u === "string" && (/^https?:\/\//i.test(u) || /^\/_blob\/[A-Za-z0-9]{8,64}$/.test(u))) ? u : "";
-const safeCover = u => (typeof u === "string" && (/^\/_blob\/[A-Za-z0-9]{8,64}$/.test(u) || /^data:image\/(jpeg|png|webp);base64,/.test(u))) ? u : null;
+const safeCover = u => (typeof u === "string" && (/^\/_blob\/[A-Za-z0-9]{8,64}$/.test(u) || /^\/api\/cover\/\d+(\?v=[a-z0-9]+)?$/.test(u) || /^data:image\/(jpeg|png|webp);base64,/.test(u))) ? u : null;
 
 function cleanEntry(x) {
   const s = v => (typeof v === "string" ? v : v == null ? "" : String(v)).slice(0, 400);
@@ -890,6 +900,7 @@ function cleanEntry(x) {
     archive_link: null, note: s(x.note) || null, cover: safeCover(x.cover),
     added: s(x.added) || null, source: s(x.source) || null,
     fileAsset: typeof x.fileAsset === "string" ? x.fileAsset : null, coverAsset: typeof x.coverAsset === "string" ? x.coverAsset : null,
+    hasFile: !!x.hasFile, fileType: s(x.fileType) || "", hasText: !!x.hasText,
     _doc: x._doc || null, _extra: true,
   };
 }
@@ -897,7 +908,9 @@ function nextId() { return Math.max(0, ...DATA.map(e => e.id)) + 1; }
 
 async function initStore() {
   BASE = DATA.slice();
-  if (!window.claude || !window.claude.use) { // a copy hosted elsewhere: keep additions in this browser
+  if (!window.claude || !window.claude.use) {
+    if (await initCloud()) return;
+    // a copy hosted elsewhere without the Cloudflare functions: keep additions in this browser
     store.mode = "local"; store.canAdd = true;
     try { extras = (JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]") || []).map(cleanEntry).filter(Boolean); } catch (_) { extras = []; }
     showAddButton(); if (extras.length) await applyExtras(); return;
@@ -991,6 +1004,10 @@ function setupAdd() {
   $("cardRemove").addEventListener("click", () => { $("removeAsk").hidden = false; $("cardRemove").hidden = true; });
   $("removeNo").addEventListener("click", () => { $("removeAsk").hidden = true; $("cardRemove").hidden = false; });
   $("removeYes").addEventListener("click", removeOpen);
+  $("cardFile").addEventListener("click", () => openFile(false));
+  $("cardDownload").addEventListener("click", () => openFile(true));
+  $("cardAttach").addEventListener("click", attachFile);
+  $("attachInput").addEventListener("change", attachChosen);
   $("fTopic").innerHTML = `<option value="">Choose a topic</option>` + TOPICS.map(t => `<option>${esc(t)}</option>`).join("");
 }
 function setSrc(src) {
@@ -1018,6 +1035,10 @@ async function readIt() {
   btn.disabled = true;
   try {
     if (file) { status.textContent = "Reading the file…"; info = await readFile(file); text = info.text; }
+    else if (addSrc === "link" && !text && store.mode === "cloud" && store.canAdd) {
+      status.textContent = "Opening the link…";
+      try { const r = await api("fetch-text", { method: "POST", json: { url } }); text = [r.title && "Page title: " + r.title, r.meta, r.text].filter(Boolean).join("\n"); } catch (_) {}
+    }
     info.kind = info.kind || addSrc; info.text = text;
     let d = plainDetails({ text, url, fileName: file && file.name, pdfTitle: info.pdfTitle, pdfAuthor: info.pdfAuthor });
     if (store.sample && (text || url)) {
@@ -1046,6 +1067,7 @@ async function readIt() {
 function noteFor(info, url) {
   const bits = [];
   if (store.sample) bits.push("Details were filled in from the text only. Check them before saving.");
+  if (store.mode === "cloud" && (info.kind === "pdf" || info.kind === "doc" || info.kind === "text") && !url) bits.push("The file is kept on your shelf; only you can open it.");
   if (info.picture) bits.push(info.kind === "pdf" ? "The picture is the file's first page." : "The picture is the first image in the document.");
   if (store.mode === "local" && !url && info.kind !== "link") bits.push("This copy can't keep the file itself, so add a link if you want a Read button.");
   if (store.mode === "db" && !url && (info.kind === "pdf" || info.kind === "doc" || info.kind === "text")) bits.push(info.kind === "pdf" ? "Read will open the PDF you uploaded." : "Read will open the text you added.");
@@ -1084,7 +1106,13 @@ async function saveIt() {
   };
   const usePic = $("fUsePic").checked && info.picture;
   try {
-    if (store.mode === "db") {
+    if (store.mode === "cloud") {
+      pendingArrival = id;
+      const keepFile = file && (info.kind === "pdf" || info.kind === "doc" || info.kind === "text") ? file : null;
+      const read = await saveCloud(entry, { ...info, text: info.text || lastRead.text || "" }, keepFile, usePic);
+      pendingArrival = read.id;
+      await loadCloud();
+    } else if (store.mode === "db") {
       if (file && info.kind === "pdf") entry.fileAsset = (await store.assets.upload(file, { type: "application/pdf" })).id;
       else if (!link && info.text) entry.fileAsset = (await store.assets.upload(new Blob([title + "\n\n" + info.text], { type: "text/plain" }), { type: "text/plain" })).id;
       if (usePic) entry.coverAsset = (await store.assets.upload(info.picture)).id;
@@ -1104,7 +1132,9 @@ async function saveIt() {
   } catch (e) {
     btn.disabled = false; pendingArrival = null;
     const code = e && e.code;
-    status.textContent = code === "too_large" ? "That file is over 20 MB. Try a smaller copy."
+    status.textContent = code === "owner_only" ? "Sign in as the owner first (the link at the foot of the page)."
+      : code === "server_error" && e.message ? e.message
+      : code === "too_large" ? "That file is over 20 MB. Try a smaller copy."
       : code === "quota_or_state" || code === "quota_exceeded" ? "The page's storage is full. Remove a few added reads and try again."
       : code === "rate_limited" ? "Too many saves at once. Wait a moment and try again."
       : (e && e.name === "QuotaExceededError") ? "This browser's storage is full. Download essays.json, then remove a few added reads."
@@ -1129,7 +1159,10 @@ async function removeOpen() {
   const b = openB; if (!b || !b.essay._extra) return;
   const e = b.essay; $("removeAsk").hidden = true;
   try {
-    if (store.mode === "db") {
+    if (store.mode === "cloud") {
+      await api("reads/" + e.id, { method: "DELETE" });
+      await loadCloud();
+    } else if (store.mode === "db") {
       await store.db.collection("reads").doc(e._doc || ("r" + e.id)).delete();
       for (const a of [e.fileAsset, e.coverAsset]) if (a) await store.assets.delete(a).catch(() => {});
     } else {
@@ -1140,3 +1173,236 @@ async function removeOpen() {
     announce(`${e.title} was removed.`);
   } catch (_) { $("cardRemove").hidden = false; announce("Removing didn't work. Try again."); }
 }
+
+
+/* =====================================================================
+   The Cloudflare copy: added reads, files and AI live on the server (functions/api).
+   Anyone can browse, read summaries and talk about a read; only the owner,
+   with the passphrase set in Cloudflare, can add, remove and open files.
+   ===================================================================== */
+async function api(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (store.ownerKey) headers["x-owner-key"] = store.ownerKey;
+  if (opts.json !== undefined) { headers["content-type"] = "application/json"; opts.body = JSON.stringify(opts.json); }
+  const res = await fetch("/api/" + path, { method: opts.method || "GET", headers, body: opts.body, signal: opts.signal });
+  if (opts.raw) return res;
+  let data = null; try { data = await res.json(); } catch (_) {}
+  if (!res.ok || !data || data.ok === false) throw Object.assign(new Error((data && data.message) || "Request failed"), { code: (data && data.error) || "http_" + res.status, status: res.status });
+  return data;
+}
+const lsGet = k => { try { return localStorage.getItem(k) || ""; } catch (_) { return ""; } };
+const lsSet = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (_) {} };
+
+async function initCloud() {
+  let st;
+  try { const r = await fetch("/api/status", { headers: { accept: "application/json" } }); if (!r.ok) return false; st = await r.json(); } catch (_) { return false; }
+  if (!st || !st.ok) return false;
+  store.ai = !!st.ai;
+  setupAI();
+  if (!st.store) return false; // functions run but no storage yet: fall back to this browser
+  store.mode = "cloud";
+  $("ownerBtn").hidden = !st.owner;
+  const saved = lsGet(OWNER_KEY_STORE);
+  if (saved && st.owner) {
+    store.ownerKey = saved;
+    try { await api("owner", { method: "POST", json: { key: saved } }); store.canAdd = true; } catch (_) { store.ownerKey = ""; lsSet(OWNER_KEY_STORE, ""); }
+  }
+  syncOwner();
+  await loadCloud();
+  if (store.canAdd) moveLocalToCloud();
+  return true;
+}
+async function loadCloud() {
+  try {
+    const { reads } = await api("reads");
+    extras = reads.map(cleanEntry).filter(Boolean).sort((a, b) => a.id - b.id);
+  } catch (_) { extras = []; }
+  await applyExtras();
+}
+function syncOwner() {
+  showAddButton();
+  $("ownerBtn").textContent = store.canAdd ? "Owner: signed in · Sign out" : "Owner sign-in";
+  if (store.mode === "cloud") store.sample = store.canAdd && store.ai ? cloudSample : null;
+  if (openB) showCard(openB);
+}
+const cloudSample = { json: async (prompt, o = {}) => (await api("details", { method: "POST", json: { prompt }, signal: o.signal })).value };
+
+function setupOwner() {
+  $("ownerBtn").addEventListener("click", () => {
+    if (store.canAdd) { store.ownerKey = ""; store.canAdd = false; lsSet(OWNER_KEY_STORE, ""); syncOwner(); announce("Signed out."); return; }
+    $("ownerSheet").hidden = false; $("ownerStatus").textContent = ""; $("ownerKey").value = ""; setTimeout(() => $("ownerKey").focus(), 30);
+  });
+  const close = () => { $("ownerSheet").hidden = true; $("ownerBtn").focus({ preventScroll: true }); };
+  $("ownerClose").addEventListener("click", close);
+  $("ownerSheet").addEventListener("pointerdown", e => { if (e.target === $("ownerSheet")) close(); });
+  $("ownerForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const key = $("ownerKey").value; if (!key) return;
+    $("ownerStatus").textContent = "Checking…";
+    try {
+      store.ownerKey = key; await api("owner", { method: "POST", json: { key } });
+      store.canAdd = true; if ($("ownerRemember").checked) lsSet(OWNER_KEY_STORE, key);
+      close(); syncOwner(); announce("Signed in. You can add, remove and open files now.");
+      moveLocalToCloud();
+    } catch (err) {
+      store.ownerKey = ""; store.canAdd = false;
+      $("ownerStatus").textContent = err.code === "wrong_key" ? "That passphrase doesn't match." : "Couldn't check it just now. Try again.";
+    }
+  });
+}
+
+// Reads added earlier in this browser (before the cloud shelf existed) move to the cloud once.
+let moving = false;
+async function moveLocalToCloud() {
+  if (moving || store.mode !== "cloud" || !store.canAdd) return;
+  let local = [];
+  try { local = (JSON.parse(lsGet(LOCAL_KEY) || "[]") || []).map(cleanEntry).filter(Boolean); } catch (_) { return; }
+  if (!local.length) return;
+  moving = true;
+  const left = [];
+  for (const e of local) {
+    try {
+      const fd = new FormData();
+      fd.append("entry", JSON.stringify(stripPrivate(e)));
+      if (e.cover && e.cover.startsWith("data:")) fd.append("cover", await (await fetch(e.cover)).blob(), "cover.jpg");
+      await api("reads", { method: "POST", body: fd });
+    } catch (_) { left.push(e); }
+  }
+  lsSet(LOCAL_KEY, left.length ? JSON.stringify(left.map(stripPrivate)) : "");
+  moving = false;
+  if (left.length < local.length) { announce("Reads saved in this browser are now on the shelf everywhere."); await loadCloud(); }
+}
+
+async function saveCloud(entry, info, file, usePic) {
+  const fd = new FormData();
+  fd.append("entry", JSON.stringify(entry));
+  if (file) fd.append("file", file, file.name);
+  else if (!entry.link && info.text) fd.append("file", new Blob([entry.title + "\n\n" + info.text], { type: "text/plain" }), "text.txt");
+  if (info.text) fd.append("text", info.text);
+  if (usePic) fd.append("cover", await smallBlob(info.picture), "cover.jpg");
+  const { read } = await api("reads", { method: "POST", body: fd });
+  return read;
+}
+async function smallBlob(blob) {
+  const url = await smallDataUrl(blob); return (await fetch(url)).blob();
+}
+
+/* ---------- opening an uploaded file (owner only) ---------- */
+async function openFile(download) {
+  const e = openB && openB.essay; if (!e) return;
+  // open the tab now, while the click still counts, then point it at the short-lived link
+  const w = download ? null : window.open("", "_blank");
+  try {
+    const r = await api("file-link/" + e.id, { method: "POST" });
+    if (download) { const a = document.createElement("a"); a.href = r.download; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
+    else if (w) { w.opener = null; w.location.href = r.view; }
+    else location.href = r.view;
+  } catch (err) {
+    if (w) w.close();
+    announce(err.code === "owner_only" ? "Sign in as the owner to open this file." : "The file couldn't be opened. Try again.");
+    $("shareNote").textContent = err.code === "owner_only" ? "Only the owner can open this file." : "The file couldn't be opened just now.";
+  }
+}
+function attachFile() {
+  const inp = $("attachInput"); inp.value = ""; inp.click();
+}
+async function attachChosen() {
+  const f = $("attachInput").files[0]; const e = openB && openB.essay; if (!f || !e) return;
+  $("shareNote").textContent = "Reading the file…";
+  try {
+    const info = await readFile(f);
+    const fd = new FormData();
+    fd.append("entry", "{}"); fd.append("file", f, f.name);
+    if (info.text) fd.append("text", info.text);
+    if (info.picture && !e.cover) fd.append("cover", await smallBlob(info.picture), "cover.jpg");
+    $("shareNote").textContent = "Uploading…";
+    await api("reads/" + e.id, { method: "PATCH", body: fd });
+    $("shareNote").textContent = "File attached.";
+    coverImages.delete(e.id);
+    await loadCloud();
+  } catch (err) { $("shareNote").textContent = (err && err.message && !/Request failed/.test(err.message)) ? err.message : "Attaching didn't work. Try again."; }
+}
+
+/* ---------- talking about a read ---------- */
+let aiFor = null, aiMsgs = [], aiCtl = null;
+function setupAI() {
+  if (setupAI.done) return; setupAI.done = true;
+  $("cardAsk").addEventListener("click", () => openAI());
+  $("aiClose").addEventListener("click", closeAI);
+  $("aiSheet").addEventListener("pointerdown", e => { if (e.target === $("aiSheet")) closeAI(); });
+  $("aiForm").addEventListener("submit", e => { e.preventDefault(); ask($("aiInput").value); });
+  $("aiInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask($("aiInput").value); } });
+  for (const b of document.querySelectorAll("[data-ask]")) b.addEventListener("click", () => ask(b.dataset.ask));
+  $("aiRefresh").addEventListener("click", () => loadSummary(true));
+}
+function openAI() {
+  const e = openB && openB.essay; if (!e) return;
+  $("aiSheet").hidden = false;
+  if (aiFor !== e.id) {
+    aiFor = e.id; aiMsgs = []; $("aiLog").innerHTML = "";
+    $("aiTitle").textContent = e.title;
+    $("aiMeta").textContent = [e.author, e.publication, e.year].filter(Boolean).join(" · ");
+    loadSummary(false);
+  }
+  setTimeout(() => $("aiInput").focus(), 30);
+}
+function closeAI() { if (aiCtl) aiCtl.abort(); $("aiSheet").hidden = true; $("cardAsk").focus({ preventScroll: true }); }
+const aiOpen = () => !$("aiSheet").hidden;
+
+async function loadSummary(fresh) {
+  const id = aiFor, box = $("aiSummary");
+  box.textContent = "Reading it and writing a summary…"; box.setAttribute("aria-busy", "true"); $("aiSource").textContent = "";
+  try {
+    const r = await api("summary/" + id + (fresh ? "?fresh=1" : ""));
+    if (aiFor !== id) return;
+    renderSummary(box, r.summary);
+    $("aiSource").textContent = r.from === "uploaded" ? "From the file you uploaded." : r.from === "page" ? "From the article's web page." : "The article itself couldn't be read (paywall or blocked), so this only uses the title and note.";
+  } catch (err) {
+    if (aiFor !== id) return;
+    box.textContent = err.code === "no_ai" ? "AI isn't connected on this site yet." : "The summary couldn't be made just now. Try again in a moment.";
+  } finally { box.removeAttribute("aria-busy"); }
+}
+function renderSummary(box, text) {
+  box.innerHTML = "";
+  const lines = String(text || "").split(/\n+/).map(l => l.trim()).filter(Boolean);
+  let ul = null;
+  for (const l of lines) {
+    if (/^[-*•]\s+/.test(l)) { if (!ul) { ul = document.createElement("ul"); box.appendChild(ul); } const li = document.createElement("li"); li.textContent = l.replace(/^[-*•]\s+/, ""); ul.appendChild(li); }
+    else { ul = null; const p = document.createElement("p"); p.textContent = l; box.appendChild(p); }
+  }
+}
+async function ask(q) {
+  q = (q || "").trim(); if (!q || aiCtl) return;
+  const id = aiFor; $("aiInput").value = "";
+  aiMsgs.push({ role: "user", content: q }); bubble("user", q);
+  const out = bubble("assistant", ""); out.classList.add("typing"); out.textContent = "…";
+  aiCtl = new AbortController(); $("aiSend").disabled = true;
+  let text = "";
+  try {
+    const res = await api("chat/" + id, { method: "POST", json: { messages: aiMsgs }, raw: true, signal: aiCtl.signal });
+    if (!res.ok || !res.body) { let d = null; try { d = await res.json(); } catch (_) {} throw Object.assign(new Error("chat"), { code: d && d.error }); }
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith("data:")) continue;
+        const d = line.slice(5).trim(); if (d === "[DONE]") continue;
+        try { const j = JSON.parse(d); const t = j.response ?? (j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content) ?? ""; if (t) { text += t; out.textContent = text; out.classList.remove("typing"); scrollLog(); } } catch (_) {}
+      }
+    }
+    if (!text) throw new Error("empty");
+    aiMsgs.push({ role: "assistant", content: text });
+  } catch (err) {
+    if (err && err.name === "AbortError") { out.remove(); aiMsgs.pop(); }
+    else { out.classList.remove("typing"); out.textContent = err && err.code === "no_ai" ? "AI isn't connected on this site yet." : "That didn't go through. Try asking again."; aiMsgs.pop(); }
+  } finally { aiCtl = null; $("aiSend").disabled = false; if (aiFor === id && aiOpen()) $("aiInput").focus({ preventScroll: true }); }
+}
+function bubble(role, text) {
+  const d = document.createElement("div"); d.className = "msg " + role; d.textContent = text;
+  if (role === "assistant") d.setAttribute("aria-live", "polite");
+  $("aiLog").appendChild(d); scrollLog(); return d;
+}
+function scrollLog() { const l = $("aiLog"); l.scrollTop = l.scrollHeight; }

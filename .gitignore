@@ -5,3 +5,4 @@ perf/before/
 perf/after/
 *.log
 .DS_Store
+.wrangler/

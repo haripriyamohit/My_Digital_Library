@@ -19,3 +19,22 @@ On a copy you host yourself (the `site/` folder) there is no Claude, so you fill
 - Covers for the original 150: put an image in `public/covers/`, for example `091.jpg`, and set that item's `"cover"` to `"covers/091.jpg"`. None could be downloaded during the build; `covers-missing.tsv` lists all 150.
 - Share links look like `…/#book-091`.
 - `perf/` has the smoothness test (`measure.py`) and its results; `results.md` is the summary.
+
+## Cloud shelf, files and AI (Cloudflare)
+
+The `functions/api` folder runs on Cloudflare Pages and adds:
+
+- **Added reads stored online**, so they appear on every device (not just one browser).
+- **Your uploaded PDF / Word files**, which only you can open or download.
+- **Summary & ask AI** on every book: a short summary and a conversation about the piece, using the
+  uploaded file's text or the article's web page (paywalled pages fall back to the title and note).
+
+It needs three things in Cloudflare → Workers & Pages → my-digital-library → Settings → Bindings / Variables:
+
+| Name | Type | What it is |
+|---|---|---|
+| `SHELF` | KV namespace | where added reads, files and summaries are kept |
+| `AI` | Workers AI | the model for summaries and chat (free daily allowance) |
+| `OWNER_KEY` | Secret | your passphrase; sign in with "Owner sign-in" at the foot of the page |
+
+Without these, the site still works as before and keeps additions in the browser.

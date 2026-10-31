@@ -1,5 +1,6 @@
 // Book factory: turns one essay into a three.js paperback (spine, covers, cream page edges).
 import * as THREE from "three";
+import { drawTopicArt } from "./art.js";
 
 export const PALETTE = [
   // [cover, ink] — candy-shop colours, ink chosen for contrast
@@ -90,6 +91,8 @@ export function coverCanvas(essay, shape, image, scale = 1) {
     const iw = image.width * s, ih = image.height * s;
     x.save(); x.beginPath(); x.rect(28 * u, panelTop, pw, panelH); x.clip();
     x.drawImage(image, 28 * u + (pw - iw) / 2, panelTop + (panelH - ih) / 2, iw, ih); x.restore();
+  } else if (panelH > 20 * u) {
+    drawTopicArt(x, 28 * u, panelTop, W - 56 * u, panelH, essay, shape);
   }
   // author at the foot
   x.fillStyle = shape.ink; x.textBaseline = "middle";
