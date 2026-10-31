@@ -101,6 +101,8 @@ function cleanEntry(x, id) {
     year: str(x.year, 9) || null, description: str(x.description, 300), topic: str(x.topic, 80),
     link: /^https?:\/\//i.test(link) ? link : "", status: link ? "unchecked" : "uploaded",
     source: str(x.source, 20) || null, added: str(x.added, 40) || new Date().toISOString(),
+    more: (Array.isArray(x.more) ? x.more : []).map(m => ({ label: str(m && m.label, 60), url: str(m && m.url, 2000) }))
+      .filter(m => m.label && /^https?:\/\//i.test(m.url)).slice(0, 4),
   };
 }
 
@@ -144,7 +146,7 @@ async function patchRead(request, env, id) {
   const form = await request.formData();
   const raw = JSON.parse(form.get("entry") || "{}");
   const keep = list[i];
-  const entry = Object.keys(raw).length ? { ...keep, ...cleanEntry({ ...keep, ...raw }, id), hasFile: keep.hasFile, fileType: keep.fileType, fileName: keep.fileName, cover: keep.cover, hasText: keep.hasText } : { ...keep };
+  const entry = Object.keys(raw).length ? { ...keep, ...cleanEntry({ ...keep, ...raw }, id), added: keep.added, hasFile: keep.hasFile, fileType: keep.fileType, fileName: keep.fileName, cover: keep.cover, hasText: keep.hasText } : { ...keep };
   await storeParts(env, entry, form);
   list[i] = entry; await saveIndex(env, list);
   return json({ ok: true, read: publicEntry(entry) });
@@ -230,13 +232,17 @@ async function material(request, env, id) {
   let text = "", from = "none";
   const own = await env.SHELF.get("text:" + id);
   if (own) { text = own; from = "uploaded"; }
-  else if (e.link && /^https?:\/\//i.test(e.link)) {
-    const cached = await env.SHELF.get("page:" + id, "json");
-    if (cached) { text = cached.text || ""; from = text ? "page" : "page_unavailable"; }
-    else {
-      const r = await pageText(e.link);
-      await env.SHELF.put("page:" + id, JSON.stringify({ text: r.text || "", reason: r.reason || "" }), { expirationTtl: 60 * 60 * 24 * (r.text ? 30 : 2) });
-      text = r.text || ""; from = text ? "page" : "page_unavailable";
+  else {
+    // the main link first, then any extra links on the entry, until one can be read
+    const links = [e.link].concat((e.more || []).map(m => m.url)).filter(u => u && /^https?:\/\//i.test(u));
+    if (links.length) {
+      const cached = await env.SHELF.get("page:" + id, "json");
+      if (cached) text = cached.text || "";
+      else {
+        for (const u of links) { const r = await pageText(u); if (r.text) { text = r.text; break; } }
+        await env.SHELF.put("page:" + id, JSON.stringify({ text }), { expirationTtl: 60 * 60 * 24 * (text ? 30 : 2) });
+      }
+      from = text ? "page" : "page_unavailable";
     }
   }
   return { e, text: text.slice(0, MAX_CONTEXT), from, truncated: text.length > MAX_CONTEXT };

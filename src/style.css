@@ -170,3 +170,6 @@ main{max-width:1200px;margin:18px auto 0}
 .ai-summary-wrap{flex:0 0 auto;max-height:32vh;overflow-y:auto}
 .ai-panel.chatting .ai-summary-wrap{max-height:18vh}
 .ai-log{min-height:min(220px,30vh)}
+.card-more{margin:10px 0 0;font:400 13px/1.5 var(--mono);color:var(--muted)}
+.card-more a{color:var(--ink);text-underline-offset:3px}
+.card-more a:hover{color:var(--lemon)}

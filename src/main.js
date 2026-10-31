@@ -684,6 +684,12 @@ function showCard(b) {
   $("cardDownload").hidden = !(e.hasFile && owner);
   $("cardAttach").hidden = !(e._extra && owner && !e.hasFile);
   $("cardFileNote").hidden = !(e.hasFile && !owner);
+  const more = $("cardMore"); more.innerHTML = "";
+  if (e.more && e.more.length) {
+    more.append("Also: ");
+    e.more.forEach((m, i) => { if (i) more.append(" · "); const a = document.createElement("a"); a.href = m.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = m.label; more.appendChild(a); });
+  }
+  more.hidden = !(e.more && e.more.length);
   $("cardAsk").hidden = !(store.mode === "cloud" && store.ai);
   $("cardRemove").hidden = !(e._extra && store.canAdd); $("removeAsk").hidden = true;
   const card = $("card"); card.hidden = false;
@@ -902,6 +908,7 @@ function cleanEntry(x) {
     added: s(x.added) || null, source: s(x.source) || null,
     fileAsset: typeof x.fileAsset === "string" ? x.fileAsset : null, coverAsset: typeof x.coverAsset === "string" ? x.coverAsset : null,
     hasFile: !!x.hasFile, fileType: s(x.fileType) || "", hasText: !!x.hasText,
+    more: (Array.isArray(x.more) ? x.more : []).map(m => ({ label: s(m && m.label).slice(0, 60), url: safeLink(m && m.url) })).filter(m => m.label && m.url && /^https?:/.test(m.url)).slice(0, 4),
     _doc: x._doc || null, _extra: true,
   };
 }
