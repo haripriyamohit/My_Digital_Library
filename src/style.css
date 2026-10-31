@@ -166,3 +166,7 @@ main{max-width:1200px;margin:18px auto 0}
 .owner-panel{width:min(420px,100%)}
 .owner-panel input[type=password]{width:100%}
 @media (max-width:600px){.ai-panel{max-height:100vh;border-radius:0}.msg{max-width:94%}}
+/* keep room for the conversation on short screens */
+.ai-summary-wrap{flex:0 0 auto;max-height:32vh;overflow-y:auto}
+.ai-panel.chatting .ai-summary-wrap{max-height:18vh}
+.ai-log{min-height:min(220px,30vh)}

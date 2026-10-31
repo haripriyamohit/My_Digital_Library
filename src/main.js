@@ -1339,7 +1339,7 @@ function openAI() {
   const e = openB && openB.essay; if (!e) return;
   $("aiSheet").hidden = false;
   if (aiFor !== e.id) {
-    aiFor = e.id; aiMsgs = []; $("aiLog").innerHTML = "";
+    aiFor = e.id; aiMsgs = []; $("aiLog").innerHTML = ""; document.querySelector(".ai-panel").classList.remove("chatting");
     $("aiTitle").textContent = e.title;
     $("aiMeta").textContent = [e.author, e.publication, e.year].filter(Boolean).join(" · ");
     loadSummary(false);
@@ -1375,6 +1375,7 @@ async function ask(q) {
   q = (q || "").trim(); if (!q || aiCtl) return;
   const id = aiFor; $("aiInput").value = "";
   aiMsgs.push({ role: "user", content: q }); bubble("user", q);
+  document.querySelector(".ai-panel").classList.add("chatting");
   const out = bubble("assistant", ""); out.classList.add("typing"); out.textContent = "…";
   aiCtl = new AbortController(); $("aiSend").disabled = true;
   let text = "";
