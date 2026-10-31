@@ -605,10 +605,11 @@ function tablePose(b) {
 }
 async function openBook(b) {
   if (!has3D || !b) return;
-  const token = ++openToken;
+  let token = ++openToken;
   while (busy) { await sleep(60); if (token !== openToken) return; }
   if (!b.visible || openB === b) return;
-  if (openB) closeBook({ fast: true, keepView: true });
+  // closing the current book bumps the token too, so take a fresh one for this opening
+  if (openB) { closeBook({ fast: true, keepView: true }); token = ++openToken; }
   hovered = null; keySel = null;
   const real = prepare(b);              // cover painted and uploaded before anything moves
   await new Promise(r => requestAnimationFrame(r));
